@@ -1,0 +1,26 @@
+import requests
+
+class City:
+  def __init__(self, lat, lon):
+    self.lat = lat
+    self.lon = lon
+    self.get_data()
+
+  def get_data(self):
+    try:
+       response = requests.get(f"https://api.openweathermap.org/data/2.5/weather?units=imperial&lat={self.lat}&lon={self.lon}&appid=fb17850fdd4e725bdabe779bf752bb92")
+    except:
+        print("whoops!")
+
+    response_json = response.json()
+    self.name = response_json["name"]
+    self.temp = response_json["main"]["temp"]
+    self.temp_min = response_json["main"]["temp_min"]
+    self.temp_max = response_json["main"]["temp_max"]
+    self.feels_like = response_json["main"]["feels_like"]
+
+  def temp_print(self):
+   print(f"In {self.name} it is currently {self.temp} and it feels like {self.feels_like}. The high today is {self.temp_max} and the low is {self.temp_min}.")
+    
+my_city = City(43.0125, -83.6875)
+my_city.temp_print()
