@@ -72,16 +72,15 @@ Server events (Socket.IO) — quick reference
   - roundResults: { scores, picks, realText, nextReaderName, roundNumber, rounds }
   - error: { message }
 
-Customization
+How you can customize your gameplay
 - Titles & real first lines: edit `SAMPLE_BOOKS` in `LIEbrary/server.js` to add or change books.
 - Scoring logic: implemented in `finalizeVoting(game)` in `LIEbrary/server.js`. Modify if you want different rules.
 - Timers: submission and voting durations are set in `startRound()` and `emitVotingPhase()` (60 seconds and 60 seconds × eligible voters respectively). Adjust those durations for faster/slower games.
 
 Limitations and notes
-- In-memory game state: when the server restarts all games/scores are lost. For persistence, add a database.
-- Reconnection: current implementation does not restore a player's socket automatically if they reload/disconnect. You can extend the server to support reconnection by mapping players to persistent IDs and reattaching them to rooms.
-- Security: there is minimal validation. Don't expose this server on the public internet without adding rate-limiting and appropriate input sanitization for production use.
-- Edge cases: small numbers of players (1 or 2) are allowed but gameplay may be trivial — you may want to add minimum player checks before starting.
+- In-memory game state: when the server restarts all games/scores are lost.
+- Reconnection: current implementation does not restore a player's socket automatically if they reload/disconnect.
+- Security: there is minimal validation. Do NOT expose this server on the public internet.
 
 Development
 - Run server with nodemon (recommended for development):
@@ -94,8 +93,9 @@ How to contribute
 - Fork the repository, create a branch for your change, and open a pull request.
 - If you want help implementing a feature (reconnect, persistence, better UI), open an issue and we can discuss design before coding.
 
-Example changes you might want next
+Things I want to add in the future
 - Add reconnection support so players who reload keep their scores.
+- Add more titles and first lines
 - Persist games & scores in a small database (SQLite, Redis).
 - Improve UI/UX: better mobile layout, timers visually represented, animations.
 - Add authentication so players keep a persistent identity across devices.
