@@ -1,0 +1,382 @@
+*** Begin Patch
+*** Delete File: LIEbrary
+*** Add File: LIEbrary/index.html
++<!DOCTYPE html>
++<html lang="en">
++<head>
++    <meta charset="UTF-8">
++    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <title>Liebrary Game</title>
++    <style>
++        body {
++            font-family: Arial, sans-serif;
++            margin: 0;
++            padding: 20px;
++            background: #2a1b3d;
++            color: white;
++        }
++        .container {
++            max-width: 900px;
++            margin: 0 auto;
++            text-align: center;
++        }
++        .hidden { display: none; }
++        button {
++            background: #ffcc00;
++            border: none;
++            padding: 10px 20px;
++            margin: 5px;
++            border-radius: 5px;
++            cursor: pointer;
++        }
++        input {
++            padding: 10px;
++            margin: 5px;
++            border-radius: 5px;
++            border: none;
++        }
++        .player-list {
++            margin: 20px 0;
++            padding: 10px;
++            background: rgba(255,255,255,0.06);
++            text-align: left;
++        }
++        .line-option {
++            background: rgba(255,255,255,0.08);
++            padding: 10px;
++            margin: 5px;
++            border-radius: 5px;
++            cursor: pointer;
++        }
++        .line-option.disabled {
++            opacity: 0.6;
++            pointer-events: none;
++        }
++        .scoreboard {
++            text-align: left;
++            margin-top: 10px;
++        }
++        .timer {
++            font-weight: bold;
++            margin: 8px 0;
++        }
++    </style>
++</head>
++<body>
++    <div class="container">
++        <h1>Liebrary</h1>
++
++        <!-- Join Screen -->
++        <div id="joinScreen">
++            <input type="text" id="nameInput" placeholder="Your Name">
++            <div>
++                <button onclick="createGame()">Create Game</button>
++                <button onclick="showJoinInput()">Join Game</button>
++            </div>
++            <div id="joinGameInput" class="hidden">
++                <input type="text" id="roomInput" placeholder="Room Code">
++                <button onclick="joinGame()">Join</button>
++            </div>
++        </div>
++
++        <!-- Lobby -->
++        <div id="lobbyScreen" class="hidden">
++            <h2>Game Lobby</h2>
++            <div id="roomCode"></div>
++            <div id="playerList" class="player-list"></div>
++            <div id="hostControls" class="hidden">
++                <label>Rounds:
++                    <input type="number" id="roundsInput" value="5" min="1" style="width:60px;">
++                </label>
++                <button onclick="startGame()">Start Game</button>
++            </div>
++        </div>
++
++        <!-- Game -->
++        <div id="gameScreen" class="hidden">
++            <h2 id="bookTitle"></h2>
++            <div id="roundInfo"></div>
++
++            <div id="submitSection" class="hidden">
++                <h3 id="submitPrompt">Write your fake first line</h3>
++                <input type="text" id="lineInput" placeholder="Write your line">
++                <div class="timer" id="submitTimer"></div>
++                <button id="submitBtn" onclick="submitLine()">Submit</button>
++            </div>
++
++            <div id="waitingForSubmits" class="hidden">
++                Waiting for other players to submit...
++                <div class="timer" id="submitTimerWaiting"></div>
++            </div>
++
++            <div id="voteSection" class="hidden">
++                <h3>Vote for the real first line</h3>
++                <div class="timer" id="voteTimer"></div>
++                <div id="voteOptions"></div>
++            </div>
++
++            <div id="resultsSection" class="hidden">
++                <h3>Round Results</h3>
++                <div id="roundResultsText"></div>
++                <div class="scoreboard" id="scoresList"></div>
++                <div id="nextControls" class="hidden">
++                    <button onclick="nextRound()">Next Round</button>
++                </div>
++            </div>
++        </div>
++    </div>
++
++    <script src="/socket.io/socket.io.js"></script>
++    <script>
++        const socket = io();
++        let gameState = {
++            roomCode: null,
++            isHost: false,
++            playerName: '',
++            phase: 'join',
++            playerId: null,
++            currentReaderId: null,
++            currentReaderName: null,
++            roundsTotal: 5,
++            roundNumber: 0,
++            submitEndsAt: null,
++            voteEndsAt: null
++        };
++
++        // UI Elements
++        const screens = {
++            join: document.getElementById('joinScreen'),
++            lobby: document.getElementById('lobbyScreen'),
++            game: document.getElementById('gameScreen')
++        };
++
++        function showScreen(screenName) {
++            Object.keys(screens).forEach(key => {
++                screens[key].classList.toggle('hidden', key !== screenName);
++            });
++        }
++
++        function createGame() {
++            const name = document.getElementById('nameInput').value.trim();
++            if (!name) return alert('Please enter your name');
++            gameState.playerName = name;
++            socket.emit('createGame', { playerName: name });
++        }
++
++        function showJoinInput() {
++            document.getElementById('joinGameInput').classList.remove('hidden');
++        }
++
++        function joinGame() {
++            const name = document.getElementById('nameInput').value.trim();
++            const roomCode = document.getElementById('roomInput').value.trim();
++            if (!name || !roomCode) return alert('Please enter both name and room code');
++            gameState.playerName = name;
++            socket.emit('joinGame', { playerName: name, roomCode });
++        }
++
++        function startGame() {
++            if (!gameState.isHost) return;
++            const rounds = parseInt(document.getElementById('roundsInput').value, 10) || 5;
++            socket.emit('startGame', { roomCode: gameState.roomCode, rounds });
++        }
++
++        function submitLine() {
++            const line = document.getElementById('lineInput').value.trim();
++            if (!line) return alert('Please enter a line');
++            socket.emit('submitLine', { 
++                roomCode: gameState.roomCode, 
++                line 
++            });
++            // disable local UI
++            document.getElementById('submitSection').classList.add('hidden');
++            document.getElementById('waitingForSubmits').classList.remove('hidden');
++        }
++
++        function vote(lineId) {
++            if (!lineId) return;
++            socket.emit('vote', { 
++                roomCode: gameState.roomCode, 
++                lineId
++            });
++            document.getElementById('voteSection').classList.add('hidden');
++            document.getElementById('voteOptions').innerHTML = '';
++        }
++
++        function nextRound() {
++            if (gameState.isHost) socket.emit('nextRound', { roomCode: gameState.roomCode });
++        }
++
++        // Countdown helpers
++        let submitCountdownInterval = null;
++        let voteCountdownInterval = null;
++
++        function startSubmitCountdown(endsAt) {
++            clearInterval(submitCountdownInterval);
++            const el = document.getElementById('submitTimer');
++            const elWaiting = document.getElementById('submitTimerWaiting');
++            function update() {
++                const now = Date.now();
++                const ms = Math.max(0, endsAt - now);
++                const s = Math.ceil(ms / 1000);
++                el.textContent = `Submit time left: ${s}s`;
++                elWaiting.textContent = `Submit time left: ${s}s`;
++                if (ms <= 0) {
++                    clearInterval(submitCountdownInterval);
++                    // disable submit UI if still present
++                    document.getElementById('submitBtn').disabled = true;
++                }
++            }
++            update();
++            submitCountdownInterval = setInterval(update, 250);
++        }
++
++        function startVoteCountdown(endsAt) {
++            clearInterval(voteCountdownInterval);
++            const el = document.getElementById('voteTimer');
++            function update() {
++                const now = Date.now();
++                const ms = Math.max(0, endsAt - now);
++                const s = Math.ceil(ms / 1000);
++                el.textContent = `Voting time left: ${s}s`;
++                if (ms <= 0) {
++                    clearInterval(voteCountdownInterval);
++                }
++            }
++            update();
++            voteCountdownInterval = setInterval(update, 250);
++        }
++
++        // Socket Events
++        socket.on('playerData', (data) => {
++            gameState.playerId = data.playerId;
++            gameState.isHost = data.isHost;
++            gameState.roomCode = data.roomCode;
++            document.getElementById('roomCode').textContent = `Room Code: ${data.roomCode}`;
++        });
++
++        socket.on('gameCreated', (data) => {
++            gameState.roomCode = data.roomCode;
++            gameState.isHost = true;
++            document.getElementById('roomCode').textContent = `Room Code: ${data.roomCode}`;
++            showScreen('lobby');
++            document.getElementById('hostControls').classList.remove('hidden');
++        });
++
++        socket.on('joinedGame', (data) => {
++            gameState.roomCode = data.roomCode;
++            showScreen('lobby');
++            updatePlayerList(data.players);
++        });
++
++        socket.on('updateLobby', (data) => {
++            updatePlayerList(data.players);
++        });
++
++        socket.on('gameStarted', (data) => {
++            // data includes title, readerId, readerName, roundNumber, rounds, submitEndsAt (ms)
++            showScreen('game');
++            document.getElementById('bookTitle').textContent = data.title;
++            gameState.currentReaderId = data.readerId;
++            gameState.currentReaderName = data.readerName;
++            gameState.roundNumber = data.roundNumber;
++            gameState.roundsTotal = data.rounds;
++            document.getElementById('roundInfo').textContent = `Round ${gameState.roundNumber} of ${gameState.roundsTotal}. Reader: ${gameState.currentReaderName}`;
++
++            // Submission phase: only non-reader players submit
++            if (gameState.playerId !== gameState.currentReaderId) {
++                document.getElementById('submitSection').classList.remove('hidden');
++                document.getElementById('waitingForSubmits').classList.add('hidden');
++                document.getElementById('submitPrompt').textContent = `Write a fake first line for "${data.title}"`;
++                document.getElementById('lineInput').value = '';
++                document.getElementById('submitBtn').disabled = false;
++            } else {
++                // Reader doesn't submit
++                document.getElementById('submitSection').classList.add('hidden');
++                document.getElementById('waitingForSubmits').classList.remove('hidden');
++                document.getElementById('waitingForSubmits').textContent = 'You are the reader this round — wait for submissions then read the lines.';
++            }
++
++            // timers
++            if (data.submitEndsAt) {
++                gameState.submitEndsAt = data.submitEndsAt;
++                startSubmitCountdown(data.submitEndsAt);
++            }
++            // prepare UI
++            document.getElementById('voteSection').classList.add('hidden');
++            document.getElementById('resultsSection').classList.add('hidden');
++        });
++
++        socket.on('votingPhase', (data) => {
++            // data.lines: [{ id, text }], data.voteEndsAt
++            document.getElementById('submitSection').classList.add('hidden');
++            document.getElementById('waitingForSubmits').classList.add('hidden');
++
++            const voteSection = document.getElementById('voteSection');
++            voteSection.classList.remove('hidden');
++
++            const voteOptions = document.getElementById('voteOptions');
++            voteOptions.innerHTML = data.lines.map(line => 
++                `<div class="line-option" id="line-${line.id}" onclick="vote('${line.id}')">${escapeHtml(line.text)}</div>`
++            ).join('');
++
++            // Reader should not vote
++            if (gameState.playerId === gameState.currentReaderId) {
++                Array.from(voteOptions.children).forEach(c => c.classList.add('disabled'));
++                voteOptions.insertAdjacentHTML('beforeend', '<div style="margin-top:10px;opacity:0.8">You are the reader and do not vote this round.</div>');
++            }
++
++            // start vote countdown
++            if (data.voteEndsAt) {
++                gameState.voteEndsAt = data.voteEndsAt;
++                startVoteCountdown(data.voteEndsAt);
++            }
++        });
++
++        socket.on('roundResults', (data) => {
++            document.getElementById('resultsSection').classList.remove('hidden');
++            const rr = document.getElementById('roundResultsText');
++            let picksHtml = data.picks.map(p => {
++                return `<div>${escapeHtml(p.voterName)} voted for "${escapeHtml(p.votedText)}"${p.wasReal ? ' (REAL)' : ''}</div>`;
++            }).join('');
++            rr.innerHTML = `<div>Real line: "${escapeHtml(data.realText)}"</div><hr>${picksHtml}`;
++
++            document.getElementById('scoresList').innerHTML = data.scores.map(s =>
++                `<div>${escapeHtml(s.name)}: ${s.points}</div>`
++            ).join('');
++
++            if (data.roundNumber < data.rounds) {
++                document.getElementById('nextControls').classList.toggle('hidden', !gameState.isHost);
++            } else {
++                document.getElementById('nextControls').classList.add('hidden');
++                document.getElementById('roundResultsText').insertAdjacentHTML('beforeend', '<div style="margin-top:8px;font-weight:bold">Game over.</div>');
++            }
++        });
++
++        socket.on('error', (error) => {
++            alert(error.message);
++        });
++
++        function updatePlayerList(players) {
++            document.getElementById('playerList').innerHTML = players.map(player => 
++                `<div>${escapeHtml(player.name)}${player.isHost ? ' (Host)' : ''} — ${player.score || 0} pts${player.id === gameState.currentReaderId ? ' — Reader' : ''}</div>`
++            ).join('');
++        }
++
++        // Utility to avoid injecting HTML from lines
++        function escapeHtml(str) {
++            return (str || '').replace(/[&<>"]/g, function(tag) {
++                const charsToReplace = {
++                    '&': '&amp;',
++                    '<': '&lt;',
++                    '>': '&gt;',
++                    '"': '&quot;'
++                };
++                return charsToReplace[tag] || tag;
++            });
++        }
++    </script>
++</body>
++</html>
++
+*** End Patch
